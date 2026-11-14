@@ -24,6 +24,13 @@ const orderSchema = z.object({ listingId: z.string().min(1), quantityKg: z.strin
 const addressSchema = z.string().regex(/^0x[a-fA-F0-9]{40}$/);
 const inventorySchema = z.object({ crop: z.string().min(1).max(80), stockKg: z.number().nonnegative() });
 
+app.get("/", (_req, res) => res.json({
+  service: "fairharvest-backend",
+  status: "ok",
+  network: "QIE Mainnet",
+  chainId: config.CHAIN_ID,
+  endpoints: { health: "/health", listings: "/listings", metrics: "/metrics", priceIndex: "/price-index?crop=wheat&grade=A&region=pilot" },
+}));
 app.get("/health", (_req, res) => res.json({ service: "fairharvest-backend", status: "ok", time: now() }));
 app.get("/auth/nonce", async (req, res) => { const parsed = addressSchema.safeParse(req.query.address); if (!parsed.success) return res.status(400).json({ error: "valid address query parameter required" }); return res.json(await issueNonce(store, config, parsed.data)); });
 
