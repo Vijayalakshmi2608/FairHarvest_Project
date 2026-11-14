@@ -65,7 +65,8 @@ export function useQieWallet() {
     } catch (error) { throw new Error(walletErrorMessage(error), { cause: error }); }
     finally { setConnecting(false); }
   }, []);
+  const disconnect = useCallback(() => { setAddress(undefined); setChainId(undefined); }, []);
   useEffect(() => { if (!window.ethereum) return; window.ethereum.request({ method: "eth_accounts" }).then((a) => { const accounts = a as string[]; if (accounts[0]) setAddress(accounts[0] as Address); }).catch(() => undefined); }, []);
   const walletClient = address && window.ethereum ? createWalletClient({ account: address, chain: qieChain, transport: custom(window.ethereum) }) : undefined;
-  return { address, chainId, connecting, connect, walletClient, isWrongNetwork: Boolean(chainId && chainId !== qieChain.id) };
+  return { address, chainId, connecting, connect, disconnect, walletClient, isWrongNetwork: Boolean(chainId && chainId !== qieChain.id) };
 }
