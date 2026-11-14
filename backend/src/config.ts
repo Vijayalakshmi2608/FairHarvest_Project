@@ -2,8 +2,10 @@ import "dotenv/config";
 import { z } from "zod";
 
 const EnvSchema = z.object({
-  PORT: z.coerce.number().default(4000),
-  DATABASE_URL: z.string().default("./fairharvest.sqlite"),
+  PORT: z.coerce.number().default(3001),
+  DATABASE_URL: z.string().min(1).default("postgres://localhost:5432/fairharvest"),
+  NODE_ENV: z.string().default("development"),
+  ALLOWED_ORIGINS: z.string().default("*"),
   CHAIN_ID: z.coerce.number().int().default(1990),
   STABLECOIN_DECIMALS: z.coerce.number().int().min(0).max(36).default(18),
   RPC_URL: z.string().optional(),
