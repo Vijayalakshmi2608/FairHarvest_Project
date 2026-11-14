@@ -1,0 +1,28 @@
+{
+  "name": "fairharvest-qie",
+  "private": true,
+  "version": "0.1.0",
+  "description": "FairHarvest QIE farmer-to-consumer marketplace monorepo",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "compile": "npm --prefix contracts run compile",
+    "test": "npm --prefix contracts test",
+    "lint": "npm --prefix contracts run lint",
+    "generate:deployer-key": "tsx scripts/generate-deployer-key.ts",
+    "check:deployer": "tsx scripts/check-deployer.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.9",
+    "ethers": "^6.17.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
