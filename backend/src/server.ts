@@ -13,8 +13,18 @@ import { restockRuleSchema, runActiveRestockRules, runRestockOnce, verifyRestock
 const logger = pino({ level: config.LOG_LEVEL, base: { service: "fairharvest-backend" } });
 const store = await db(config);
 const app = express();
-const allowedOrigins = config.ALLOWED_ORIGINS === "*" ? true : config.ALLOWED_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean);
-app.use(cors({ origin: allowedOrigins }));
+const normalizeOrigin = (origin: string) => origin.trim().replace(/\/$/, "").toLowerCase();
+const allowAllOrigins = config.ALLOWED_ORIGINS.trim() === "*";
+const allowedOrigins = new Set(config.ALLOWED_ORIGINS.split(",").map(normalizeOrigin).filter(Boolean));
+const corsOptions = {
+  origin: (requestOrigin: string | undefined, callback: (error: Error | null, allowed?: boolean) => void) => {
+    if (!requestOrigin || allowAllOrigins || allowedOrigins.has(normalizeOrigin(requestOrigin))) return callback(null, true);
+    return callback(new Error("Origin is not allowed by FairHarvest backend CORS policy"));
+  },
+  methods: ["GET", "POST", "PUT", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "x-qie-address", "x-qie-message", "x-qie-signature"],
+};
+app.use(cors(corsOptions));
 app.use(express.json({ limit: "64kb" }));
 app.use(rateLimit({ windowMs: config.RATE_LIMIT_WINDOW_MS, limit: config.RATE_LIMIT_MAX, standardHeaders: true, legacyHeaders: false }));
 const wallet = requireWallet(store);

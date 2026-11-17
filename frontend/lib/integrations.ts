@@ -21,11 +21,36 @@ function canonicalRule(rule: RestockRule, signer: string) {
 }
 
 async function authenticatedHeaders(address: string, signMessage: (message: string) => Promise<`0x${string}`>) {
-  const nonceResponse = await fetch(`${api}/auth/nonce?address=${encodeURIComponent(address)}`, { cache: "no-store" });
+  let nonceResponse: Response;
+  try {
+    nonceResponse = await fetch(`${api}/auth/nonce?address=${encodeURIComponent(address)}`, { cache: "no-store" });
+  } catch {
+    throw new Error(`Cannot reach the FairHarvest backend at ${api}. Check that Render is running and ALLOWED_ORIGINS includes this Vercel URL.`);
+  }
   if (!nonceResponse.ok) throw new Error("Could not obtain a wallet login nonce.");
   const nonce = await nonceResponse.json() as { message: string };
   const signature = await signMessage(nonce.message);
   return { "content-type": "application/json", "x-qie-address": address, "x-qie-message": nonce.message, "x-qie-signature": signature };
+}
+
+async function readApiError(response: Response, fallback: string) {
+  try {
+    const body = await response.json() as { error?: string };
+    return body.error || `${fallback} (HTTP ${response.status})`;
+  } catch {
+    return `${fallback} (HTTP ${response.status})`;
+  }
+}
+
+async function fetchJson(url: string, init: RequestInit | undefined, fallback: string) {
+  let response: Response;
+  try {
+    response = await fetch(url, init);
+  } catch {
+    throw new Error(`Cannot reach the FairHarvest backend at ${api}. Check Render status and ALLOWED_ORIGINS for this Vercel URL.`);
+  }
+  if (!response.ok) throw new Error(await readApiError(response, fallback));
+  return response.json();
 }
 
 function actionText(action: Omit<AgentAction, "text">) {
@@ -78,10 +103,13 @@ export function useAutoRestockAgent() {
 
   const refreshActions = useCallback(async () => {
     if (!address) { setActions([]); return; }
-    const response = await fetch(`${api}/agent/actions?merchant=${encodeURIComponent(address)}`, { cache: "no-store" });
-    if (!response.ok) return;
-    const rows = await response.json() as Array<Omit<AgentAction, "text">>;
-    setActions(rows.map((item) => ({ ...item, text: actionText(item) })));
+    try {
+      const rows = await fetchJson(`${api}/agent/actions?merchant=${encodeURIComponent(address)}`, { cache: "no-store" }, "Could not load agent actions") as Array<Omit<AgentAction, "text">>;
+      setActions(rows.map((item) => ({ ...item, text: actionText(item) })));
+      setError(undefined);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load agent actions.");
+    }
   }, [address]);
 
   useEffect(() => { void refreshActions(); if (!address) return; const timer = window.setInterval(() => void refreshActions(), 10_000); return () => window.clearInterval(timer); }, [address, refreshActions]);
@@ -95,9 +123,7 @@ export function useAutoRestockAgent() {
       const executor = next.executor || address;
       const signature = await walletClient.signMessage({ message: canonicalRule({ ...next, executor }, signer) });
       const headers = await authenticatedHeaders(address, (message) => walletClient.signMessage({ message }));
-      const response = await fetch(`${api}/agent/rules`, { method: "POST", headers, body: JSON.stringify({ ...next, executor, signer, signature }) });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || "Could not save signed rule.");
+      const body = await fetchJson(`${api}/agent/rules`, { method: "POST", headers, body: JSON.stringify({ ...next, executor, signer, signature }) }, "Could not save signed rule.");
       setRule(body); await refreshActions();
       return body;
     } catch (cause) { const message = cause instanceof Error ? cause.message : "Could not save signed rule."; setError(message); throw new Error(message); } finally { setLoading(false); }
@@ -106,15 +132,13 @@ export function useAutoRestockAgent() {
   const updateInventory = async (crop: string, stockKg: number) => {
     if (!address || !walletClient) throw new Error("Connect QIE Wallet first.");
     const headers = await authenticatedHeaders(address, (message) => walletClient.signMessage({ message }));
-    const response = await fetch(`${api}/agent/inventory`, { method: "PUT", headers, body: JSON.stringify({ crop, stockKg }) });
-    if (!response.ok) throw new Error("Could not update stock level.");
+    await fetchJson(`${api}/agent/inventory`, { method: "PUT", headers, body: JSON.stringify({ crop, stockKg }) }, "Could not update stock level.");
   };
 
   const runNow = async () => {
     if (!address || !walletClient) throw new Error("Connect QIE Wallet first.");
     const headers = await authenticatedHeaders(address, (message) => walletClient.signMessage({ message }));
-    const response = await fetch(`${api}/agent/run`, { method: "POST", headers, body: "{}" });
-    if (!response.ok) throw new Error("Could not run the agent.");
+    await fetchJson(`${api}/agent/run`, { method: "POST", headers, body: "{}" }, "Could not run the agent.");
     await refreshActions();
   };
 
